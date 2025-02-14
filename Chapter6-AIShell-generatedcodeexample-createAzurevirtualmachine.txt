@@ -1,0 +1,143 @@
+param adminUsername string
+    param adminPassword string
+
+    resource storageAccount 'Microsoft.Storage/storageAccounts@2021-04-01' = {
+      name: 'springtoysvmlogs4'
+      location: 'East US'
+      sku: {
+        name: 'Standard_LRS'
+      }
+      kind: 'StorageV2'
+    }
+
+    resource virtualNetwork 'Microsoft.Network/virtualNetworks@2020-06-01' existing = {
+      name: 'springtoys-vnet-eus'
+      location: 'East US'
+    }
+
+    resource frontendSubnet 'Microsoft.Network/virtualNetworks/subnets@2020-06-01' existing = {
+      parent: virtualNetwork
+      name: 'frontend'
+    }
+
+    resource publicIP 'Microsoft.Network/publicIPAddresses@2020-06-01' = {
+      name: 'myPublicIP'
+      location: 'East US'
+      properties: {
+        publicIPAllocationMethod: 'Dynamic'
+      }
+    }
+
+    resource networkInterface 'Microsoft.Network/networkInterfaces@2020-06-01' = {
+      name: 'myNIC'
+      location: 'East US'
+      properties: {
+        ipConfigurations: [
+          {
+            name: 'myIPConfig'
+            properties: {
+              subnet: {
+                id: frontendSubnet.id
+              }
+              publicIPAddress: {
+                id: publicIP.id
+              }
+            }
+          }
+        ]
+      }
+    }
+
+    resource virtualMachine 'Microsoft.Compute/virtualMachines@2020-06-01' = {
+      name: 'mylowcostvm'
+      location: 'East US'
+      zones: [
+        '1'
+      ]
+      properties: {
+        hardwareProfile: {
+          vmSize: 'Standard_B1s' // Low-cost VM size
+        }
+        osProfile: {
+          computerName: 'mylowcostvm'
+          adminUsername: adminUsername
+          adminPassword: adminPassword
+        }
+        storageProfile: {
+          imageReference: {
+            publisher: 'MicrosoftWindowsServer'
+            offer: 'WindowsServer'
+            sku: '2022-Datacenter'
+            version: 'latest'
+          }
+          osDisk: {
+            createOption: 'FromImage'
+          }
+          dataDisks: [
+            {
+              lun: 0
+              createOption: 'Empty'
+              diskSizeGB: 1024
+            }
+            {
+              lun: 1
+              createOption: 'Empty'
+              diskSizeGB: 1024
+            }
+          ]
+        }
+        networkProfile: {
+          networkInterfaces: [
+            {
+              id: networkInterface.id
+            }
+          ]
+        }
+        diagnosticsProfile: {
+          bootDiagnostics: {
+            enabled: true
+            storageUri: 'https://${storageAccount.name}.blob.core.windows.net'
+          }
+        }
+      }
+      tags: {
+        environment: 'dev'
+      }
+    }
+
+    resource networkSecurityGroup 'Microsoft.Network/networkSecurityGroups@2020-06-01' = {
+      name: 'myNSG'
+      location: 'East US'
+      properties: {
+        securityRules: [
+          {
+            name: 'Allow-HTTP'
+            properties: {
+              priority: 1000
+              direction: 'Inbound'
+              access: 'Allow'
+              protocol: 'Tcp'
+              sourcePortRange: '*'
+              destinationPortRange: '80'
+              sourceAddressPrefix: '*'
+              destinationAddressPrefix: '*'
+            }
+          }
+        ]
+      }
+    }
+
+    resource nicNSGAssociation 'Microsoft.Network/networkInterfaces/networkSecurityGroup@2020-06-01' = {
+      parent: networkInterface
+      properties: {
+        networkSecurityGroup: {
+          id: networkSecurityGroup.id
+        }
+      }
+    }
+
+  Placeholders:
+
+  •  <adminUsername> : Admin username for the VM
+
+  •  <adminPassword> : Admin password for the VM   
